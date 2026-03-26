@@ -47,10 +47,12 @@ class Antivir:
     def _test_file(self, filename: str) -> None:
         """Uploads a single EICAR file and reports the result."""
         files = {self.param: (filename, EICAR_STRING.encode(), "application/octet-stream")}
+        data = dict(item.split("=", 1) for item in self.args.data.split("&")) if self.args.data else None
         response = self.http_client.send_request(
             url=self.args.url,
             method="POST",
             files=files,
+            data=data,
         )
 
         accepted = self._upload_accepted(response)

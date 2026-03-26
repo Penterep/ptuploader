@@ -38,6 +38,7 @@ class PtUploader:
         self.ptthreads   = ptthreads.PtThreads()
         self._lock       = threading.Lock()
         self.args        = args
+        self.args.headers = ptnethelper.get_request_headers(args)
         self.http_client = HttpClient(args=self.args, ptjsonlib=self.ptjsonlib)
 
     def fetch(self, url, allow_redirects=False):

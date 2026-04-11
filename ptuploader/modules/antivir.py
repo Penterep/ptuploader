@@ -28,10 +28,12 @@ class Antivir:
     def _get_filenames(self) -> list:
         """Returns list of filenames to test based on -f and -e arguments."""
         base = self.args.file or "eicar.txt"
+        stem, _, ext = base.rpartition(".")
+        stem = stem or base
+        ext = ext or "txt"
         if self.args.extensions:
-            stem = base.rsplit(".", 1)[0] if "." in base else base
-            return [f"{stem}.{ext}" for ext in self.args.extensions]
-        return [base]
+            return [f"{stem}_antivir.{e}" for e in self.args.extensions]
+        return [f"{stem}_antivir.{ext}"]
 
     def _upload_accepted(self, response) -> bool:
         """Returns True if upload response matches -sy/-sn criteria."""

@@ -36,8 +36,12 @@ class Traversal:
         self.param       = args.parameter or "file"
 
     def _get_base_filename(self) -> str:
-        """Returns base filename from -f argument or default."""
-        return self.args.file or "test.txt"
+        """Returns base filename with traversal module identifier."""
+        base = self.args.file or "test.txt"
+        stem, _, ext = base.rpartition(".")
+        stem = stem or base
+        ext = ext or "txt"
+        return f"{stem}_traversal.{ext}"
 
     def _get_parent_url(self) -> str | None:
         """Returns the parent directory URL of the storage path."""

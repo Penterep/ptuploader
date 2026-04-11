@@ -218,7 +218,7 @@ def parse_args() -> argparse.Namespace:
     # Tests
     parser.add_argument("-ts", "--tests",        type=lambda s: s.upper(), nargs="+", default=None,
                         choices=["ANTIVIR", "MAXSIZE", "COUNT", "EXT", "CHARS", "EXEC",
-                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB"])
+                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB", "STORAGE"])
 
     # HTTP options
     parser.add_argument("-ua", "--user-agent",   type=str, default=None, dest="user_agent")

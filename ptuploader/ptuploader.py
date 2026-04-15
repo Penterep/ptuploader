@@ -55,6 +55,10 @@ class PtUploader:
 
     def run(self) -> None:
         """Main method"""
+        if self.args.upload_type and self.args.upload_type != "MULTIPART":
+            ptprint(f"Upload type '{self.args.upload_type}' is currently in development", "WARNING", not self.args.json)
+            return
+
         tests = self.args.tests or _get_all_available_modules()
         self.ptthreads.threads(tests, self.run_single_module, self.args.threads)
 
@@ -175,10 +179,13 @@ def get_help():
             ["-n",  "--number",       "<number>",         "Number of uploaded files"],
             ["-e",  "--extensions",   "<extensions>",     "Set extensions of uploaded file"],
             ["-l",  "--language",     "<language>",       "Set app programming language (PHP, ASP, JSP, NET, PY, JS)"],
+            ["-T",  "--type",         "<type>",           "Set upload type (multipart)"],
+            ["-ct", "--content-type", "<mimetype>",       "Set Content-Type for uploaded file"],
             ["-r",  "--request",      "<request>",        "Set request file or content of request in base64 (headers included)"],
             ["-d",  "--data",         "<data>",           "Set request-data"],
             ["-P",  "--parameter",    "<parameter>",      "Set parameter to test (e.g. GET, POST parameters)"],
             ["-s",  "--storage",      "<url_to_dir>",     "Set URL to directory with upload (http://example.com/uploads/)"],
+            ["-w",  "--wordlist",     "<file>",           "Set custom wordlist file for storage discovery"],
             ["-sy", "--string-yes",   "<string>",         "Set the string that must be included in the response to pass the success test"],
             ["-sn", "--string-no",    "<string>",         "Set the string that must not be included in the response to pass the success test"],
             ["-ts", "--tests",        "<test>",           "Specify one or more tests to perform:"],
@@ -208,17 +215,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-e",  "--extensions",   type=str, nargs="+", default=None)
     parser.add_argument("-l",  "--language",     type=lambda s: s.upper(), default=None,
                         choices=["PHP", "ASP", "JSP", "NET", "PY", "JS"])
+    parser.add_argument("-T",  "--type",         type=lambda s: s.upper(), default=None,
+                        choices=["MULTIPART", "RAW", "JSON", "CHUNKED", "PUT", "WEBDAV", "WEBSOCKET"],
+                        dest="upload_type")
+    parser.add_argument("-ct", "--content-type", type=str, default=None, dest="content_type")
     parser.add_argument("-r",  "--request",      type=str, default=None)
     parser.add_argument("-d",  "--data",         type=str, default=None)
     parser.add_argument("-P",  "--parameter",    type=str, default=None)
     parser.add_argument("-s",  "--storage",      type=str, default=None)
+    parser.add_argument("-w",  "--wordlist",     type=str, default=None)
     parser.add_argument("-sy", "--string-yes",   type=str, default=None, dest="string_yes")
     parser.add_argument("-sn", "--string-no",    type=str, default=None, dest="string_no")
 
     # Tests
     parser.add_argument("-ts", "--tests",        type=lambda s: s.upper(), nargs="+", default=None,
                         choices=["ANTIVIR", "MAXSIZE", "COUNT", "EXT", "CHARS", "EXEC",
-                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB", "STORAGE"])
+                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB", "FINDSTORAGE"])
 
     # HTTP options
     parser.add_argument("-ua", "--user-agent",   type=str, default=None, dest="user_agent")

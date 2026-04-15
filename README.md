@@ -50,27 +50,32 @@ PTUPLOADER -u http://example.com/upload.php -r requestfile.txt -P file -s http:/
 -e    --extensions   <extensions>     Extensions of uploaded files
 -l    --language     <language>       Target language (PHP, ASP, JSP, NET, PY, JS)
 
+-T    --type         <type>           Upload type: MULTIPART (default, others in development)
+-ct   --content-type <mimetype>       Content-Type of uploaded file (e.g. image/jpeg)
+
 -r    --request      <request>        Raw request file or base64 request (headers included)
 -d    --data         <data>           Custom request data
 -P    --parameter    <parameter>      Parameter to test (e.g. file, upload, POST param)
 
 -s    --storage      <url_to_dir>     URL to uploaded files directory
+-w    --wordlist     <file>           Custom wordlist file for storage path discovery
 -sy   --string-yes   <string>         Required string in response for success
 -sn   --string-no    <string>         Forbidden string in response for success
 
 -ts   --tests        <test>           Select test type:
-                                     ANTIVIR     Detect antivirus presence
-                                     MAXSIZE     Max file size limit
-                                     COUNT       Max file count limit
-                                     EXT         Allowed extensions (+ execution test)
-                                     CHARS       Allowed filename characters
-                                     EXEC        Execution bypass techniques
-                                     ADS         Alternate Data Streams
-                                     TRAVERSAL   Path traversal vulnerability
-                                     CONTENT     File content validation
-                                     CT          Content-Type validation
-                                     XXE         XXE vulnerability
-                                     ZIPBOMB     Zip bomb vulnerability
+                                     ANTIVIR      Detect antivirus presence
+                                     FINDSTORAGE  Find uploaded file via dictionary attack
+                                     MAXSIZE      Max file size limit
+                                     COUNT        Max file count limit
+                                     EXT          Allowed extensions (+ execution test)
+                                     CHARS        Allowed filename characters
+                                     EXEC         Execution bypass techniques
+                                     ADS          Alternate Data Streams
+                                     TRAVERSAL    Path traversal vulnerability
+                                     CONTENT      File content validation
+                                     CT           Content-Type validation
+                                     XXE          XXE vulnerability
+                                     ZIPBOMB      Zip bomb vulnerability
 ```
 
 ## Dependencies

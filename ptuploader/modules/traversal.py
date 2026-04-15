@@ -66,7 +66,8 @@ class Traversal:
         """Uploads a file with a traversal prefix in the filename and checks the result."""
         traversal_filename = prefix + base_filename
         data = dict(item.split("=", 1) for item in self.args.data.split("&")) if self.args.data else None
-        files = {self.param: (traversal_filename, b"traversal test", "application/octet-stream")}
+        content_type = getattr(self.args, "content_type", None) or "application/octet-stream"
+        files = {self.param: (traversal_filename, b"traversal test", content_type)}
         response = self.http_client.send_request(
             url=self.args.url,
             method="POST",

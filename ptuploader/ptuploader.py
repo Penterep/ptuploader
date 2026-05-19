@@ -146,6 +146,42 @@ def _get_all_available_modules() -> list:
     return available_modules
 
 
+def _apply_request_file(args) -> None:
+    """Parse the request file and fill in any args fields not already set via CLI."""
+    from helpers.request_parser import parse_request_file
+
+    try:
+        parsed = parse_request_file(args.request)
+    except ValueError as e:
+        ptprint(str(e), "ERROR", not args.json)
+        sys.exit(1)
+
+    if not args.url:
+        args.url = parsed['url']
+
+    if not args.cookie and parsed['cookie']:
+        args.cookie = parsed['cookie']
+
+    if not args.data and parsed['data']:
+        args.data = parsed['data']
+
+    if not args.parameter and parsed.get('parameter'):
+        args.parameter = parsed['parameter']
+
+    if parsed['headers']:
+        existing_lower = set()
+        if args.headers:
+            existing_lower = {h.split(':')[0].strip().lower() for h in args.headers}
+        else:
+            args.headers = []
+
+        for name, value in parsed['headers'].items():
+            if name.lower() == 'user-agent' and not args.user_agent:
+                args.user_agent = value
+            elif name.lower() not in existing_lower:
+                args.headers.append(f"{name}:{value}")
+
+
 def get_help():
     """
     Generate structured help content for the CLI tool.
@@ -208,7 +244,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False, description=f"{SCRIPTNAME} <options>")
 
     # Target
-    parser.add_argument("-u",  "--url",          type=str, required=True)
+    parser.add_argument("-u",  "--url",          type=str, required=False, default=None)
     parser.add_argument("-f",  "--file",         type=str, default=None)
     parser.add_argument("-sz", "--size",         type=str, default=None)
     parser.add_argument("-n",  "--number",       type=int, default=None)
@@ -253,6 +289,15 @@ def parse_args() -> argparse.Namespace:
         sys.exit(0)
 
     args = parser.parse_args()
+
+    if not args.url and not args.request:
+        parser.error("one of -u/--url or -r/--request is required")
+
+    if args.request:
+        _apply_request_file(args)
+
+    if not args.url:
+        parser.error("could not determine URL — provide -u/--url or include a Host header in the request file")
 
     print_banner(SCRIPTNAME, __version__, args.json, 0)
     return args

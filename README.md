@@ -76,6 +76,7 @@ PTUPLOADER -u http://example.com/upload.php -r requestfile.txt -P file -s http:/
                                      CT           Content-Type validation
                                      XXE          XXE vulnerability
                                      ZIPBOMB      Zip bomb vulnerability
+                                     LISTTYPE     Detect whitelist vs. blacklist extension filtering
 ```
 
 ## Dependencies

@@ -146,8 +146,30 @@ def _get_all_available_modules() -> list:
     return available_modules
 
 
+def _remove_data_field(data: str, field: str) -> str | None:
+    """Remove a named field from a urlencoded-style data string (``k=v&k2=v2``).
+
+    Used when ``-P`` selects a parameter that already exists in the request body:
+    the selected field becomes the file-upload field, so it must be pulled out of
+    the data to avoid being sent twice. Returns the remaining data, or None if no
+    fields remain.
+    """
+    remaining = [
+        item for item in data.split("&")
+        if item and item.split("=", 1)[0] != field
+    ]
+    return "&".join(remaining) if remaining else None
+
+
 def _apply_request_file(args) -> None:
-    """Parse the request file and fill in any args fields not already set via CLI."""
+    """Parse the request file and fill in any args fields not already set via CLI.
+
+    The ``-P``/``--parameter`` switch is context-sensitive here: with a request
+    file it *selects* which parameter in the request is tested. If the selected
+    parameter is an existing form field it is removed from the data so the upload
+    field is not duplicated; if ``-P`` is omitted, the file field auto-detected
+    from the request is used.
+    """
     from helpers.request_parser import parse_request_file
 
     try:
@@ -162,11 +184,19 @@ def _apply_request_file(args) -> None:
     if not args.cookie and parsed['cookie']:
         args.cookie = parsed['cookie']
 
+    # Capture the user-supplied -P before falling back to the auto-detected field.
+    user_parameter = args.parameter
+
     if not args.data and parsed['data']:
         args.data = parsed['data']
 
     if not args.parameter and parsed.get('parameter'):
         args.parameter = parsed['parameter']
+
+    # If the user explicitly selected a parameter that already exists in the
+    # request body, pull it out of the data so it isn't sent in both places.
+    if user_parameter and args.data:
+        args.data = _remove_data_field(args.data, user_parameter)
 
     if parsed['headers']:
         existing_lower = set()
@@ -266,7 +296,8 @@ def parse_args() -> argparse.Namespace:
     # Tests
     parser.add_argument("-ts", "--tests",        type=lambda s: s.upper(), nargs="+", default=None,
                         choices=["ANTIVIR", "MAXSIZE", "COUNT", "EXT", "CHARS", "EXEC",
-                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB", "FINDSTORAGE"])
+                                 "ADS", "TRAVERSAL", "CONTENT", "CT", "XXE", "ZIPBOMB", "FINDSTORAGE",
+                                 "LISTTYPE"])
 
     # HTTP options
     parser.add_argument("-ua", "--user-agent",   type=str, default=None, dest="user_agent")

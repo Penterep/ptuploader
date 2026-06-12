@@ -118,6 +118,10 @@ def _import_module_from_path(module_name: str) -> ModuleType:
     Raises:
         ImportError: If the module cannot be found or loaded.
     """
+    # `-ts` uppercases test names (e.g. EXT) but module files are lowercase
+    # (ext.py). Normalize so lookups don't depend on a case-insensitive
+    # filesystem — on case-sensitive systems (Linux) the wrong case fails.
+    module_name = module_name.lower()
     module_path = os.path.join(os.path.dirname(__file__), "modules", f"{module_name}.py")
 
     spec = importlib.util.spec_from_file_location(module_name, module_path)

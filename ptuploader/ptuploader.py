@@ -25,7 +25,7 @@ import sys; sys.path.append(__file__.rsplit("/", 1)[0])
 from types import ModuleType
 
 from ptlibs import ptjsonlib, ptmisclib, ptnethelper
-from ptlibs.ptprinthelper import ptprint, print_banner, help_print, get_colored_text
+from ptlibs.ptprinthelper import ptprint, print_banner, help_print, get_colored_text, out_if
 from ptlibs.threads import ptthreads, printlock
 from ptlibs.http.http_client import HttpClient
 
@@ -85,6 +85,11 @@ class PtUploader:
     def run_single_module(self, module_name: str) -> None:
         """Safely loads and executes a specified module's `run()` function.
 
+        Before importing, the module's required parameters (see
+        MODULE_REQUIREMENTS) are validated. If any are missing the module is
+        skipped with a message naming them, so a full run keeps going for the
+        modules that are properly parameterised.
+
         The method locates the module file in the "modules" directory, imports it dynamically,
         and executes its `run()` method with provided arguments and a shared `ptjsonlib` object.
         Each module call receives a dedicated PrintLock for thread-safe, atomic output.
@@ -95,9 +100,24 @@ class PtUploader:
         Args:
             module_name (str): The name of the module (without `.py` extension) to execute.
         """
+        key = module_name.lower()
+
+        missing = _missing_requirements(key, self.args)
+        if missing:
+            print_lock = printlock.PrintLock()
+            print_lock.add_string_to_output(
+                out_if(f"Test '{key.upper()}' skipped - missing required parameters:", "WARNING", not self.args.json)
+            )
+            for label in missing:
+                print_lock.add_string_to_output(
+                    out_if(label, "WARNING", not self.args.json, indent=4)
+                )
+            print_lock.lock_print_output(condition=not self.args.json)
+            return
+
         try:
             with self._lock:
-                module = _import_module_from_path(module_name)
+                module = _import_module_from_path(key)
 
             if hasattr(module, "run") and callable(module.run):
                 print_lock = printlock.PrintLock()
@@ -112,14 +132,18 @@ class PtUploader:
                 except Exception as e:
                     ptprint(str(e), "ERROR", not self.args.json)
                 finally:
+                    if _needs_storage_note(key, self.args):
+                        print_lock.add_string_to_output(
+                            out_if("-s/--storage not set - uploaded-file accessibility not verified", "WARNING", not self.args.json, indent=4)
+                        )
                     print_lock.lock_print_output(condition=not self.args.json)
             else:
-                ptprint(f"Module '{module_name}' does not have 'run' function", "WARNING", not self.args.json)
+                ptprint(f"Module '{key}' does not have 'run' function", "WARNING", not self.args.json)
 
         except FileNotFoundError:
-            ptprint(f"Module '{module_name}' not found", "ERROR", not self.args.json)
+            ptprint(f"Module '{key}' not found", "ERROR", not self.args.json)
         except Exception as e:
-            ptprint(f"Error running module '{module_name}': {e}", "ERROR", not self.args.json)
+            ptprint(f"Error running module '{key}': {e}", "ERROR", not self.args.json)
 
 
 def _import_module_from_path(module_name: str) -> ModuleType:
@@ -165,6 +189,67 @@ def _get_all_available_modules() -> list:
         if f.endswith(".py") and not f.startswith("_")
     ]
     return available_modules
+
+
+# ---------------------------------------------------------------------------
+# Per-module parameter requirements
+#
+# Both `-ts <TEST>` (single test) and a full run go through run_single_module(),
+# so validating here covers both. A module whose required parameters are not
+# satisfied is skipped with a message naming what is missing; the other modules
+# still run.
+#
+# Each requirement is (attr_or_attrs, label):
+#   attr_or_attrs : an args attribute, or a tuple of attributes meaning
+#                   "at least one of these must be set"
+#   label         : human-readable text shown when the requirement is unmet
+# ---------------------------------------------------------------------------
+
+_REQ_REQUEST_OR_DATA = (("request", "data"),         "-r/--request or -d/--data (upload request)")
+_REQ_PARAMETER       = ("parameter",                 "-P/--parameter (upload field name)")
+_REQ_SUCCESS_STRING  = (("string_yes", "string_no"), "-sy/--string-yes or -sn/--string-no (upload success indicator)")
+_REQ_STORAGE         = ("storage",                   "-s/--storage (URL to upload directory)")
+
+# Every module needs a request to replay, the upload field, and a way to tell
+# whether an upload was accepted.
+_BASE_REQUIREMENTS = [_REQ_REQUEST_OR_DATA, _REQ_PARAMETER, _REQ_SUCCESS_STRING]
+
+# Central map: module name -> full list of required parameters.
+MODULE_REQUIREMENTS = {
+    "findstorage": _BASE_REQUIREMENTS,
+    "antivir":     _BASE_REQUIREMENTS,
+    "maxsize":     _BASE_REQUIREMENTS,
+    "count":       _BASE_REQUIREMENTS,
+    "ext":         _BASE_REQUIREMENTS,
+    "chars":       _BASE_REQUIREMENTS,
+    "ct":          _BASE_REQUIREMENTS + [_REQ_STORAGE],
+    "content":     _BASE_REQUIREMENTS,
+    "exec":        _BASE_REQUIREMENTS + [_REQ_STORAGE],
+    "ads":         _BASE_REQUIREMENTS,
+    "traversal":   _BASE_REQUIREMENTS + [_REQ_STORAGE],
+    "xxe":         _BASE_REQUIREMENTS,
+    "zipbomb":     _BASE_REQUIREMENTS,
+    "listtype":    _BASE_REQUIREMENTS,
+}
+
+# Modules that verify file accessibility when -s is given but still produce a
+# useful result without it -> only an informational note when -s is missing.
+_STORAGE_NOTE = {"antivir", "ext", "chars", "content", "ads", "xxe", "zipbomb", "listtype"}
+
+
+def _missing_requirements(module_name: str, args) -> list:
+    """Returns labels for every required parameter that is not satisfied."""
+    missing = []
+    for attrs, label in MODULE_REQUIREMENTS.get(module_name, _BASE_REQUIREMENTS):
+        names = (attrs,) if isinstance(attrs, str) else attrs
+        if not any(getattr(args, name, None) for name in names):
+            missing.append(label)
+    return missing
+
+
+def _needs_storage_note(module_name: str, args) -> bool:
+    """True if the module checks file accessibility but -s/--storage is missing."""
+    return module_name in _STORAGE_NOTE and not args.storage
 
 
 def _remove_data_field(data: str, field: str) -> str | None:
@@ -255,9 +340,9 @@ def get_help():
         {"description": ["Tool for testing file upload vulnerabilities on web servers"]},
         {"usage": ["ptuploader <options>"]},
         {"usage_example": [
-            "ptuploader -u https://www.example.com/upload -f file.php",
-            "ptuploader -u https://www.example.com/upload -f file.php -ts EXT EXEC",
-            "ptuploader -u https://www.example.com/upload -r request.txt -s http://example.com/uploads/",
+            "ptuploader -u https://www.example.com/upload -r request.txt -P file -sy \"upload ok\"",
+            "ptuploader -u https://www.example.com/upload -d \"token=abc\" -P file -sy \"upload ok\" -ts EXT",
+            "ptuploader -r request.txt -P file -sy \"upload ok\" -s http://example.com/uploads/ -ts EXEC",
         ]},
         {"options": [
             ["-u",  "--url",          "<url>",            "Tested URL"],

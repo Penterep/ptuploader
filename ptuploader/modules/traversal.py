@@ -109,7 +109,7 @@ class Traversal:
 
     def run(self) -> None:
         self.print_lock.add_string_to_output(
-            out_if(__TESTLABEL__, "INFO", not self.args.json)
+            self.print_lock.add_string_to_output(out_if(__TESTLABEL__, "TITLE", not self.args.json, colortext=True))
         )
         base_filename = self._get_base_filename()
         for prefix in TRAVERSAL_PREFIXES:

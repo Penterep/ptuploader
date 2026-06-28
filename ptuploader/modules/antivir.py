@@ -12,6 +12,7 @@ Usage:
 
 from ptlibs.ptprinthelper import out_if
 
+
 __TESTLABEL__ = "Antivirus Detection Test:"
 
 EICAR_STRING = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
@@ -90,9 +91,7 @@ class Antivir:
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-ANTIVIR")
 
     def run(self) -> None:
-        self.print_lock.add_string_to_output(
-            out_if(__TESTLABEL__, "INFO", not self.args.json)
-        )
+        self.print_lock.add_string_to_output(out_if(__TESTLABEL__, "TITLE", not self.args.json, colortext=True))
         for filename in self._get_filenames():
             self._test_file(filename)
 

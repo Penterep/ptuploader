@@ -390,7 +390,7 @@ class Xxe:
 
     def run(self) -> None:
         self.print_lock.add_string_to_output(
-            out_if(__TESTLABEL__, "INFO", not self.args.json)
+            self.print_lock.add_string_to_output(out_if(__TESTLABEL__, "TITLE", not self.args.json, colortext=True))
         )
 
         stem = f"{self._get_stem()}_xxe"

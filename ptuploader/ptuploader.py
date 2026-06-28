@@ -41,23 +41,40 @@ class PtUploader:
         self.args.headers = ptnethelper.get_request_headers(args)
         self.http_client = HttpClient(args=self.args, ptjsonlib=self.ptjsonlib)
 
-    def fetch(self, url, allow_redirects=False):
+    def _check_target_reachable(self) -> tuple[bool, str]:
+        """Probe the target before running any test.
+
+        Any HTTP response — even 404/405, since upload endpoints usually reject
+        GET — proves the host is up, so the status code is irrelevant here. A
+        raised exception means the server could not be reached at all (DNS
+        failure, refused connection, timeout, …); its remapped message is
+        returned so the caller can report why.
+
+        Returns:
+            (reachable, reason): ``reason`` is empty when reachable.
+        """
         try:
-            return self.http_client.send_request(
-                url=url,
+            response = self.http_client.send_request(
+                url=self.args.url,
                 method="GET",
                 headers=self.args.headers,
-                allow_redirects=allow_redirects,
-                timeout=self.args.timeout,
+                allow_redirects=True,
             )
-        except Exception:
-            return None
+            if response is not None:
+                return True, ""
+            return False, "no response from server"
+        except Exception as e:
+            return False, str(e)
 
     def run(self) -> None:
         """Main method"""
         if self.args.upload_type and self.args.upload_type != "MULTIPART":
             ptprint(f"Upload type '{self.args.upload_type}' is currently in development", "WARNING", not self.args.json)
             return
+
+        reachable, reason = self._check_target_reachable()
+        if not reachable:
+            self.ptjsonlib.end_error(f"Target '{self.args.url}' is not reachable: {reason}", self.args.json)
 
         tests = self.args.tests or _get_all_available_modules()
         self.ptthreads.threads(tests, self.run_single_module, self.args.threads)

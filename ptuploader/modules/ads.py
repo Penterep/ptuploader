@@ -173,7 +173,7 @@ class Ads:
             )
             for url in accessible_urls:
                 self.print_lock.add_string_to_output(
-                    out_if(url, "TEXT", not self.args.json, indent=8)
+                    out_if(f"File available at: {url}", "TEXT", not self.args.json, indent=8)
                 )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-ADS")
         elif self.args.storage:
@@ -192,10 +192,6 @@ class Ads:
         )
 
         stem, ext = self._get_stem_and_ext()
-
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(ADS_TESTS)} ADS variants...", "INFO", not self.args.json, indent=4)
-        )
 
         for label, template in ADS_TESTS:
             filename = template.format(stem=stem, ext=ext)

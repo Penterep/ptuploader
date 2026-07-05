@@ -20,6 +20,7 @@ import argparse
 import importlib
 import os
 import threading
+import uuid
 import sys; sys.path.append(__file__.rsplit("/", 1)[0])
 
 from types import ModuleType
@@ -66,6 +67,150 @@ class PtUploader:
         except Exception as e:
             return False, str(e)
 
+    def _upload_accepted(self, response) -> bool:
+        """Whether an upload response counts as accepted per -sy/-sn (mirrors modules)."""
+        if response is None:
+            return False
+        text = response.text
+        if self.args.string_yes and self.args.string_yes not in text:
+            return False
+        if self.args.string_no and self.args.string_no in text:
+            return False
+        return True
+
+    def _has_cookie(self) -> bool:
+        """True if a cookie is set via -c/--cookie or carried in the request headers."""
+        if self.args.cookie:
+            return True
+        headers = self.args.headers
+        if isinstance(headers, dict):
+            return any(str(k).lower() == "cookie" for k in headers)
+        if isinstance(headers, (list, tuple)):
+            return any(isinstance(h, str) and h.split(":", 1)[0].strip().lower() == "cookie" for h in headers)
+        return False
+
+    def _print_request_summary(self) -> None:
+        """Layer 3: echo the effective upload request for a quick sanity check."""
+        cond = not self.args.json
+        if self.args.parameter:
+            field = self.args.parameter
+        else:
+            field = "file  (default - no upload field detected in request; set -P/--parameter)"
+
+        data_fields = [item.split("=", 1)[0] for item in (self.args.data or "").split("&") if item]
+
+        checks = []
+        if self.args.string_yes:
+            checks.append(f'must contain "{self.args.string_yes}"')
+        if self.args.string_no:
+            checks.append(f'must not contain "{self.args.string_no}"')
+        success_check = "; ".join(checks) if checks else "not set - success cannot be verified (set -sy/-sn)"
+
+        ptprint("Effective upload request:", "TITLE", cond, colortext=True, newline_above=True)
+        ptprint(f"URL:            {self.args.url}", "TEXT", cond, indent=4)
+        ptprint(f"Upload field:   {field}", "TEXT", cond, indent=4)
+        ptprint(f"Form fields:    {', '.join(data_fields) if data_fields else '(none)'}", "TEXT", cond, indent=4)
+        ptprint(f"Cookie:         {'present' if self._has_cookie() else 'none'}", "TEXT", cond, indent=4)
+        ptprint(f"Success check:  response {success_check}", "TEXT", cond, indent=4)
+
+    def _broken_request_signal(self, response) -> str:
+        """Return a human-readable reason if the response looks like a broken request
+        (auth/session/endpoint problem), otherwise an empty string."""
+        status = response.status_code
+        if status in (401, 403):
+            return f"HTTP {status} - authentication/authorization failed (session cookie or auth header may be missing or expired)"
+        if status == 404:
+            return "HTTP 404 - upload endpoint not found (check the URL/path in the request)"
+        if status == 405:
+            return "HTTP 405 - method not allowed at this endpoint"
+        if status >= 500:
+            return f"HTTP {status} - server error (the request may be malformed)"
+        if 300 <= status < 400:
+            location = ""
+            try:
+                location = response.headers.get("Location", "")
+            except Exception:
+                location = ""
+            suffix = f" to {location}" if location else ""
+            return f"HTTP {status} redirect{suffix} - likely a login redirect (session may be invalid)"
+        body = (getattr(response, "text", "") or "").lower()
+        markers = ("csrf token", "token is incorrect", "invalid token", "please log in",
+                   "please login", "you must be logged in", "authentication required")
+        for marker in markers:
+            if marker in body:
+                return f'response mentions "{marker}" - session or anti-CSRF token may be invalid'
+        return ""
+
+    def _preflight_hint(self) -> None:
+        """Print the common causes of a failed pre-flight upload."""
+        cond = not self.args.json
+        ptprint("Likely causes:", "TEXT", cond, indent=8)
+        for line in (
+            "expired session cookie (-c/--cookie) or missing auth header",
+            "stale anti-CSRF token in the request body (-d/--data / request file)",
+            "wrong or missing upload field (-P/--parameter)",
+            "a required form field is missing from the request",
+            "-sy/--string-yes or -sn/--string-no does not match the server's real response",
+        ):
+            ptprint(f"- {line}", "TEXT", cond, indent=10)
+
+    def _preflight_upload_check(self) -> bool:
+        """Layer 2: send one baseline upload and decide whether it is safe to run tests.
+
+        A benign .txt is uploaded with the exact field, form data, cookies and
+        headers the modules will use, so a broken request (expired session, stale
+        CSRF token, wrong upload field, miscalibrated -sy/-sn) is caught here instead
+        of silently turning every test into a false "not vulnerable". Returns True to
+        proceed, False if the request looks broken (the caller aborts unless --force).
+        """
+        cond = not self.args.json
+        ptprint("Pre-flight upload check:", "TITLE", cond, colortext=True, newline_above=True)
+
+        param = self.args.parameter or "file"
+        content_type = self.args.content_type or "text/plain"
+        filename = f"ptuploader_baseline_{uuid.uuid4().hex[:8]}.txt"
+        content = b"ptuploader baseline connectivity/authentication check"
+        data = dict(item.split("=", 1) for item in self.args.data.split("&")) if self.args.data else None
+        files = {param: (filename, content, content_type)}
+
+        try:
+            response = self.http_client.send_request(url=self.args.url, method="POST", files=files, data=data)
+        except Exception as e:
+            ptprint(f"Baseline upload could not be sent: {e}", "WARNING", cond, indent=4)
+            self._preflight_hint()
+            return False
+
+        if response is None:
+            ptprint("Baseline upload got no response from the endpoint", "WARNING", cond, indent=4)
+            self._preflight_hint()
+            return False
+
+        status = response.status_code
+        has_indicator = bool(self.args.string_yes or self.args.string_no)
+
+        if has_indicator and self._upload_accepted(response):
+            if status >= 400:
+                ptprint(f"Baseline reported success but returned HTTP {status} - verify -sy/-sn are correct", "WARNING", cond, indent=4)
+            else:
+                ptprint(f"Baseline upload accepted (HTTP {status}) - request looks correct", "OK", cond, indent=4)
+            return True
+
+        broken = self._broken_request_signal(response)
+        if broken:
+            ptprint(f"Baseline upload failed - {broken}", "WARNING", cond, indent=4)
+            self._preflight_hint()
+            return False
+
+        if not has_indicator:
+            ptprint(f"Endpoint handled the upload without an obvious error (HTTP {status}); set -sy/-sn to verify success", "INFO", cond, indent=4)
+            return True
+
+        # The app responded and there is no strong broken-request signal, but the benign
+        # file was not accepted - could be normal file-type filtering or a wrong -sy/-sn.
+        ptprint(f"Baseline .txt was not accepted (HTTP {status}) - this may be normal file-type filtering, or -sy/-sn/-f is off", "WARNING", cond, indent=4)
+        ptprint("Proceeding, but double-check -sy/-sn and consider a known-good file via -f before trusting results", "TEXT", cond, indent=8)
+        return True
+
     def run(self) -> None:
         """Main method"""
         if self.args.upload_type and self.args.upload_type != "MULTIPART":
@@ -75,6 +220,23 @@ class PtUploader:
         reachable, reason = self._check_target_reachable()
         if not reachable:
             self.ptjsonlib.end_error(f"Target '{self.args.url}' is not reachable: {reason}", self.args.json)
+
+        # Layer 3 - show the effective request so the user can sanity-check it.
+        self._print_request_summary()
+
+        # Layer 2 - one baseline upload confirms the request actually works before any
+        # test runs, so a broken request cannot silently produce clean (false) results.
+        preflight_ok = self._preflight_upload_check()
+        if not preflight_ok and not self.args.force:
+            self.ptjsonlib.end_error(
+                "Pre-flight upload check failed - aborting so unreliable results are not reported "
+                "(re-run with --force to test anyway)", self.args.json)
+
+        if self.args.dry_run:
+            ptprint("Dry run finished - request validated, no upload tests were executed", "INFO", not self.args.json, newline_above=True)
+            self.ptjsonlib.set_status("finished")
+            ptprint(self.ptjsonlib.get_result_json(), "", self.args.json)
+            return
 
         tests = self.args.tests or _get_all_available_modules()
         self.ptthreads.threads(tests, self.run_single_module, self.args.threads)
@@ -109,8 +271,11 @@ class PtUploader:
                 out_if(f"Test '{key.upper()}' skipped - missing required parameters:", "WARNING", not self.args.json)
             )
             for label in missing:
+                # The -s/--storage requirement is shown as info; every other
+                # missing parameter stays a warning.
+                label_level = "INFO" if label == _REQ_STORAGE[1] else "WARNING"
                 print_lock.add_string_to_output(
-                    out_if(label, "WARNING", not self.args.json, indent=4)
+                    out_if(label, label_level, not self.args.json, indent=4)
                 )
             print_lock.lock_print_output(condition=not self.args.json)
             return
@@ -368,6 +533,8 @@ def get_help():
             ["-H",  "--headers",      "<header:value>",   "Set custom header(s)"],
             ["-p",  "--proxy",        "<proxy>",          "Set Proxy"],
             ["-t",  "--threads",      "<threads>",        "Set thread count (default 10)"],
+            ["",    "--dry-run",      "",                 "Validate the request and run only the pre-flight upload check, then exit"],
+            ["",    "--force",        "",                 "Run tests even if the pre-flight upload check fails"],
             ["-vv", "--verbose",      "",                 "Enable verbose mode"],
             ["-v",  "--version",      "",                 "Show script version and exit"],
             ["-h",  "--help",         "",                 "Show this help message and exit"],
@@ -413,6 +580,8 @@ def parse_args() -> argparse.Namespace:
 
     # General options
     parser.add_argument("-t",  "--threads",      type=int, default=10)
+    parser.add_argument("--dry-run",             action="store_true", dest="dry_run")
+    parser.add_argument("--force",               action="store_true")
     parser.add_argument("-vv", "--verbose",      action="store_true")
     parser.add_argument("-j",  "--json",         action="store_true")
     parser.add_argument("-v",  "--version",      action="version", version=f"{SCRIPTNAME} {__version__}")

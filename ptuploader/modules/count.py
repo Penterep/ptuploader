@@ -109,10 +109,6 @@ class Count:
         max_accepted = 0
         first_rejected = None
 
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing up to {counts[-1]} files per request  [{filename}]", "INFO", not self.args.json, indent=4)
-        )
-
         for count in counts:
             result = self._test_count(filename, count)
 

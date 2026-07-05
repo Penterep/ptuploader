@@ -230,7 +230,7 @@ class Exec:
             )
             if result.get("url"):
                 self.print_lock.add_string_to_output(
-                    out_if(result["url"], "TEXT", not self.args.json, indent=8)
+                    out_if(f"File available at: {result['url']}", "TEXT", not self.args.json, indent=8)
                 )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-EXEC")
         elif execution == "source":
@@ -253,8 +253,7 @@ class Exec:
         stem = f"{self._get_stem()}_exec"
 
         self.print_lock.add_string_to_output(
-            out_if(f"Language: {language}  |  Testing {len(extensions)} extensions with bypass variants...",
-                   "INFO", not self.args.json, indent=4)
+            out_if(f"Language: {language}", "INFO", not self.args.json, indent=4)
         )
 
         executed_count = 0

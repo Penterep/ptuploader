@@ -147,10 +147,6 @@ class MaxSize:
         max_accepted_size = 0
         first_rejected_size = None
 
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(sizes)} file sizes up to {_format_size(sizes[-1])}  [{filename}]", "INFO", not self.args.json, indent=4)
-        )
-
         for size_bytes in sizes:
             result = self._test_size(filename, size_bytes)
             size_str = _format_size(size_bytes)

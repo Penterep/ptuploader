@@ -300,11 +300,6 @@ class Zipbomb:
         stem = self._get_stem()
         total = len(ARCHIVE_TESTS) + 2  # +nested +bomb
 
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {total} archive variants...",
-                   "INFO", not self.args.json, indent=4)
-        )
-
         extracted_count = 0
         accepted_count = 0
 

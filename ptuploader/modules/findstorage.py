@@ -65,32 +65,24 @@ class FindStorage:
             return False
         return True
 
-    def _get_false_positive_baseline(self, base_url: str) -> tuple:
+    def _get_baseline_status(self, base_url: str) -> int:
         """
-        Fetches a random non-existent path to establish a baseline for false-positive detection.
-        Returns (status_code, content_length).
+        Requests a random, certainly non-existent path and returns its status
+        code. A directory is then recognised as existing when it answers with a
+        *different* status code than this baseline, which keeps the search
+        reliable even on servers that reply 200 (or any fixed code) for every
+        path.
         """
         random_path = f"{base_url}/{uuid.uuid4().hex}/nonexistent_{uuid.uuid4().hex}.txt"
         response = self.http_client.send_request(url=random_path, method="GET", allow_redirects=True)
         if response is None:
-            return (404, -1)
-        return (response.status_code, len(response.content))
+            return 404
+        return response.status_code
 
-    def _is_false_positive(self, response, baseline: tuple) -> bool:
-        """Returns True if the response looks like a false positive based on the baseline."""
-        if response is None:
-            return False
-        fp_status, fp_length = baseline
-        if response.status_code != fp_status:
-            return False
-        if fp_length >= 0 and abs(len(response.content) - fp_length) < 50:
-            return True
-        return False
-
-    def _find_directories(self, base_url: str, paths: list, baseline: tuple) -> list:
+    def _find_directories(self, base_url: str, paths: list, baseline_status: int) -> list:
         """
-        Probes each path and returns those that exist (not false positives).
-        Returns list of accessible directory URLs.
+        Probes each wordlist path and keeps directories whose status code differs
+        from the non-existent baseline. Returns list of (directory URL, status code).
         """
         found = []
         for path in paths:
@@ -98,29 +90,25 @@ class FindStorage:
             response = self.http_client.send_request(url=url, method="GET", allow_redirects=True)
             if response is None:
                 continue
-            if response.status_code in (200, 403) and not self._is_false_positive(response, baseline):
+            if response.status_code != baseline_status:
                 found.append((url, response.status_code))
         return found
 
-    def _find_file(self, directories: list, filename: str, marker: bytes, base_url: str, baseline: tuple) -> list:
+    def _find_file(self, directories: list, filename: str, marker: bytes) -> list:
         """
-        Looks for the uploaded file in discovered directories and at -s storage URL.
-        Verifies file content contains the embedded marker.
+        Looks for the uploaded file inside each discovered directory and confirms
+        a hit only when the response body contains the uploaded file's unique
+        marker (a snippet of the uploaded content), not merely by status code.
         Returns list of accessible file URLs.
         """
         found = []
-        candidates = [f"{dir_url}/{filename}" for dir_url, _ in directories]
-
-        if self.args.storage:
-            candidates.insert(0, self.args.storage.rstrip("/") + "/" + filename)
-
-        for url in candidates:
+        for dir_url, _ in directories:
+            url = f"{dir_url}/{filename}"
             response = self.http_client.send_request(url=url, method="GET", allow_redirects=True)
             if response is None:
                 continue
-            if response.status_code == 200 and not self._is_false_positive(response, baseline):
-                if marker.decode() in response.text:
-                    found.append(url)
+            if response.status_code == 200 and marker.decode() in response.text:
+                found.append(url)
         return found
 
     def run(self) -> None:
@@ -143,47 +131,47 @@ class FindStorage:
 
         if not self._upload_accepted(response):
             self.print_lock.add_string_to_output(
-                out_if(f"Upload rejected, cannot perform storage discovery  [{filename}]", "OK", not self.args.json, indent=4)
+                out_if(f"Upload rejected, cannot perform storage discovery  [{filename}]", "INFO", not self.args.json, indent=4)
             )
             return
 
         self.print_lock.add_string_to_output(
-            out_if(f"File uploaded  [{filename}], searching...", "INFO", not self.args.json, indent=4)
+            out_if(f"File uploaded  [{filename}]", "INFO", not self.args.json, indent=4)
         )
 
         base_url  = self._get_base_url()
-        baseline  = self._get_false_positive_baseline(base_url)
+        baseline_status = self._get_baseline_status(base_url)
         wordlist  = get_wordlist(getattr(self.args, "wordlist", None))
 
-        directories = _find_directories_output = self._find_directories(base_url, wordlist, baseline)
+        directories = self._find_directories(base_url, wordlist, baseline_status)
 
-        self.print_lock.add_string_to_output(
-            out_if("Discovered directories for uploaded files", "INFO", not self.args.json, indent=4)
-        )
         if directories:
+            self.print_lock.add_string_to_output(
+                out_if("Accessible directories found:", "INFO", not self.args.json, indent=4)
+            )
             for dir_url, status in directories:
                 self.print_lock.add_string_to_output(
                     out_if(f"{dir_url}  [{status}]", "TEXT", not self.args.json, indent=8)
                 )
         else:
             self.print_lock.add_string_to_output(
-                out_if("No directory for uploads found", "TEXT", not self.args.json, indent=8)
+                out_if("No accessible directories found", "INFO", not self.args.json, indent=4)
             )
 
-        found_files = self._find_file(directories, filename, marker, base_url, baseline)
+        found_files = self._find_file(directories, filename, marker)
 
-        self.print_lock.add_string_to_output(
-            out_if("Uploaded file found", "INFO", not self.args.json, indent=4)
-        )
         if found_files:
+            self.print_lock.add_string_to_output(
+                out_if(f"Uploaded file found in publicly accessible directory  [{filename}]", "VULN", not self.args.json, indent=4)
+            )
             for url in found_files:
                 self.print_lock.add_string_to_output(
-                    out_if(url, "VULN", not self.args.json, indent=8)
+                    out_if(f"File available at: {url}", "TEXT", not self.args.json, indent=8)
                 )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-FINDSTORAGE")
         else:
             self.print_lock.add_string_to_output(
-                out_if("Uploaded file not found", "TEXT", not self.args.json, indent=8)
+                out_if("Uploaded file not found via dictionary search", "OK", not self.args.json, indent=4)
             )
 
 

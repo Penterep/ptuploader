@@ -369,7 +369,7 @@ class Xxe:
             if self.args.storage:
                 url = self.args.storage.rstrip("/") + "/" + fname
                 self.print_lock.add_string_to_output(
-                    out_if(url, "TEXT", not self.args.json, indent=12)
+                    out_if(f"File available at: {url}", "TEXT", not self.args.json, indent=12)
                 )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-XXE")
             return
@@ -394,11 +394,6 @@ class Xxe:
         )
 
         stem = f"{self._get_stem()}_xxe"
-
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(XXE_TESTS)} XXE payloads...",
-                   "INFO", not self.args.json, indent=4)
-        )
 
         # Group by category (preserve order)
         categories_seen = []

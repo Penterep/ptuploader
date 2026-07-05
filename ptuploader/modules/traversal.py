@@ -94,7 +94,7 @@ class Traversal:
                     out_if(f"File uploaded outside intended directory  [{traversal_filename}]", "VULN", not self.args.json, indent=4)
                 )
                 self.print_lock.add_string_to_output(
-                    out_if(escaped_url, "TEXT", not self.args.json, indent=8)
+                    out_if(f"File available at: {escaped_url}", "TEXT", not self.args.json, indent=8)
                 )
                 self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-TRAVERSAL")
             else:

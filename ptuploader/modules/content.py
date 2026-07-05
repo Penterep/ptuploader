@@ -285,7 +285,7 @@ class Content:
             if self.args.storage:
                 url = self.args.storage.rstrip("/") + "/" + fname
                 self.print_lock.add_string_to_output(
-                    out_if(url, "TEXT", not self.args.json, indent=12)
+                    out_if(f"File available at: {url}", "TEXT", not self.args.json, indent=12)
                 )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-CONTENT")
         elif result["accessible"] is False:
@@ -305,11 +305,6 @@ class Content:
         )
 
         stem = f"{self._get_stem()}_content"
-
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(CONTENT_TESTS)} content validation variants...",
-                   "INFO", not self.args.json, indent=4)
-        )
 
         # Group tests by category
         categories_seen = []

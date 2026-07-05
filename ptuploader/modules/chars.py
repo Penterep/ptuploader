@@ -14,6 +14,8 @@ Usage:
     run(args, ptjsonlib, http_client, print_lock)
 """
 
+from urllib.parse import quote
+
 from ptlibs.ptprinthelper import out_if
 
 __TESTLABEL__ = "Filename Characters Test:"
@@ -132,8 +134,13 @@ class Chars:
 
         # Upload accepted — check if accessible in storage
         if self.args.storage:
+            # Percent-encode the filename so special characters (spaces, control
+            # chars, unicode, '#', '?', ...) produce a valid, clickable link and
+            # the accessibility check targets that exact URL. Keep '/' and '%'
+            # literal so path separators and %00-style null-byte payloads survive.
             safe_filename = filename.replace("\x00", "").replace("\n", "").replace("\r", "")
-            storage_url = self.args.storage.rstrip("/") + "/" + safe_filename
+            encoded_filename = quote(safe_filename, safe="/%")
+            storage_url = self.args.storage.rstrip("/") + "/" + encoded_filename
             check = self.http_client.send_request(url=storage_url, method="GET", allow_redirects=True)
             accessible = check is not None and check.status_code == 200
 
@@ -142,7 +149,7 @@ class Chars:
                     out_if(f"Accepted and accessible  [{label}]", "VULN", not self.args.json, indent=4)
                 )
                 self.print_lock.add_string_to_output(
-                    out_if(storage_url, "TEXT", not self.args.json, indent=8)
+                    out_if(f"File available at: {storage_url}", "TEXT", not self.args.json, indent=8)
                 )
                 self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-CHARS")
             else:
@@ -158,9 +165,6 @@ class Chars:
     def run(self) -> None:
         self.print_lock.add_string_to_output(
             self.print_lock.add_string_to_output(out_if(__TESTLABEL__, "TITLE", not self.args.json, colortext=True))
-        )
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(CHAR_TESTS)} character variants...", "INFO", not self.args.json, indent=4)
         )
 
         for label, filename in CHAR_TESTS:

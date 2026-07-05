@@ -175,7 +175,7 @@ class Ext:
                 out_if(f"Accepted and accessible  [{filename}]", "VULN", not self.args.json, indent=4)
             )
             self.print_lock.add_string_to_output(
-                out_if(accessible_url, "TEXT", not self.args.json, indent=8)
+                out_if(f"File available at: {accessible_url}", "TEXT", not self.args.json, indent=8)
             )
             self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-EXT")
         elif self.args.storage:
@@ -212,7 +212,7 @@ class Ext:
                             out_if(f"Bypass successful and accessible  [{filename}]  ({desc})", "VULN", not self.args.json, indent=8)
                         )
                         self.print_lock.add_string_to_output(
-                            out_if(accessible_url, "TEXT", not self.args.json, indent=12)
+                            out_if(f"File available at: {accessible_url}", "TEXT", not self.args.json, indent=12)
                         )
                         self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-EXT-BYPASS")
                     elif self.args.storage:
@@ -232,10 +232,6 @@ class Ext:
 
         stem = self._get_stem()
         extensions = self._get_extensions()
-
-        self.print_lock.add_string_to_output(
-            out_if(f"Testing {len(extensions)} extensions...", "INFO", not self.args.json, indent=4)
-        )
 
         accepted_exts = []
         for ext in extensions:

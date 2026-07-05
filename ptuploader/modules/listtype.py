@@ -105,7 +105,7 @@ class Listtype:
                 out_if(f"Accepted and accessible  [{filename}]", "VULN", not self.args.json, indent=4)
             )
             self.print_lock.add_string_to_output(
-                out_if(accessible_url, "TEXT", not self.args.json, indent=8)
+                out_if(f"File available at: {accessible_url}", "TEXT", not self.args.json, indent=8)
             )
         else:
             self.print_lock.add_string_to_output(

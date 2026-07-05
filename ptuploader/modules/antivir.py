@@ -77,7 +77,7 @@ class Antivir:
                     out_if(f"EICAR file uploaded successfully  [{filename}]", "VULN", not self.args.json, indent=4)
                 )
                 self.print_lock.add_string_to_output(
-                    out_if(storage_url, "TEXT", not self.args.json, indent=8)
+                    out_if(f"File available at: {storage_url}", "TEXT", not self.args.json, indent=8)
                 )
                 self.ptjsonlib.add_vulnerability("PTV-WEB-UPLOAD-ANTIVIR")
             else:
